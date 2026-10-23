@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#12161b">
+<title>Ride Speedometer</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@500;600&display=swap">
+<style>
+:root{--bg:#f3f1ec;--panel:#e6e3db;--ink:#15181c;--dim:#5d646c;--accent:#d4380d;--good:#1e8a4c;--ok:#b7791f;--bad:#c0392b;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12161b;--panel:#1c222a;--ink:#f2f5f7;--dim:#8d97a2;--accent:#ff7a3d;--good:#3ddc84;--ok:#f5b83d;--bad:#ff6b5e}}
+:root[data-theme="dark"]{--bg:#12161b;--panel:#1c222a;--ink:#f2f5f7;--dim:#8d97a2;--accent:#ff7a3d;--good:#3ddc84;--ok:#f5b83d;--bad:#ff6b5e}
+*,*::before,*::after{box-sizing:inherit}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font-family:Barlow,system-ui,sans-serif;font-weight:500;-webkit-tap-highlight-color:transparent;user-select:none}
+.app{height:100%;display:flex;flex-direction:column;padding:12px 16px 16px;max-width:900px;margin:0 auto}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.tabs{display:flex;gap:6px;background:var(--panel);padding:4px;border-radius:12px}
+.tabs button{border:0;background:none;color:var(--dim);font:600 16px Barlow,sans-serif;padding:8px 16px;border-radius:9px}
+.tabs button[aria-selected="true"]{background:var(--bg);color:var(--ink)}
+.gps{display:flex;align-items:center;gap:8px;font-size:15px;color:var(--dim)}
+.dot{width:12px;height:12px;border-radius:50%;background:var(--dim)}
+.view{flex:1;min-height:0;display:none;flex-direction:column}
+.view.on{display:flex}
+.speedwrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:0}
+#speed{font:700 min(46vw,40vh,300px)/0.9 "Barlow Condensed","Arial Narrow",sans-serif;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.unit{font:600 22px Barlow,sans-serif;color:var(--dim);margin-top:4px}
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:12px 0}
+.stat{background:var(--panel);border-radius:14px;padding:10px 14px}
+.stat b{display:block;font:700 34px/1.05 "Barlow Condensed","Arial Narrow",sans-serif;font-variant-numeric:tabular-nums}
+.stat span{font-size:14px;color:var(--dim)}
+.stat.top b{color:var(--accent)}
+.go{border:0;border-radius:16px;height:68px;font:700 26px "Barlow Condensed","Arial Narrow",sans-serif;letter-spacing:.02em;background:var(--accent);color:#fff;width:100%}
+.go.stop{background:var(--panel);color:var(--ink);outline:2px solid var(--accent)}
+.msg{min-height:20px;text-align:center;font-size:14px;color:var(--bad);margin:0 0 8px}
+.list{overflow:auto;flex:1;margin-top:12px}
+.trip{background:var(--panel);border-radius:14px;padding:12px 14px;margin-bottom:10px;display:grid;grid-template-columns:1fr auto;gap:4px 12px}
+.trip h3{margin:0;font-size:16px}
+.trip .d{font:700 28px/1 "Barlow Condensed","Arial Narrow",sans-serif;text-align:right}
+.trip p{margin:0;color:var(--dim);font-size:14px;grid-column:1/-1}
+.empty{color:var(--dim);text-align:center;margin-top:40px;line-height:1.5}
+.reset{background:none;border:1px solid var(--dim);color:var(--dim);border-radius:10px;padding:10px;font:600 14px Barlow,sans-serif;margin-top:4px}
+@media (orientation:landscape) and (max-height:520px){
+ #ride.on{display:grid;grid-template-columns:1.3fr 1fr;grid-template-rows:1fr auto auto;gap:0 16px}
+ .speedwrap{grid-row:1/4}
+ .stats{grid-column:2;margin:8px 0}
+ .msg{grid-column:2}.go{grid-column:2;height:56px}
+ #speed{font-size:min(36vw,70vh)}
+}
+</style>
+</head>
+<body>
+<div class="app">
+ <header>
+  <div class="tabs" role="tablist">
+   <button role="tab" aria-selected="true" data-v="ride">Ride</button>
+   <button role="tab" aria-selected="false" data-v="trips">Trips</button>
+  </div>
+  <div class="gps"><span class="dot" id="dot"></span><span id="gtxt">GPS off</span></div>
+ </header>
+
+ <section class="view on" id="ride">
+  <div class="speedwrap"><div id="speed">0</div><div class="unit">km/h</div></div>
+  <div class="stats">
+   <div class="stat top"><b id="top">0</b><span>All-time top speed (km/h)</span></div>
+   <div class="stat"><b id="tmax">0</b><span>Trip top speed (km/h)</span></div>
+   <div class="stat"><b id="dist">0.00</b><span>Trip distance (km)</span></div>
+   <div class="stat"><b id="avg">0.0</b><span>Average moving speed (km/h)</span></div>
+   <div class="stat"><b id="mov">0:00</b><span>Moving time</span></div>
+   <div class="stat"><b id="ela">0:00</b><span>Total time</span></div>
+  </div>
+  <p class="msg" id="msg"></p>
+  <button class="go" id="go">Start ride</button>
+ </section>
+
+ <section class="view" id="trips">
+  <div class="stats" style="margin-bottom:0">
+   <div class="stat"><b id="odo">0</b><span>Total distance (km)</span></div>
+   <div class="stat top"><b id="top2">0</b><span>All-time top speed (km/h)</span></div>
+  </div>
+  <div class="list" id="list"></div>
+  <button class="reset" id="reset">Reset all-time top speed</button>
+ </section>
+</div>
+
+<script>
+(function(){
+var $=function(id){return document.getElementById(id)};
+function load(k,d){try{var v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}}
+function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+
+var topAll=load('sp_top',0), trips=load('sp_trips',[]);
+var watchId=null, wake=null, trip=null, last=null, rej=0, lastWall=0, speed=0;
+
+function clock(s){s=Math.floor(s);var h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;
+ return h?h+':'+String(m).padStart(2,'0')+':'+String(x).padStart(2,'0'):m+':'+String(x).padStart(2,'0')}
+function hav(a,b){var R=6371000,r=Math.PI/180,dl=(b.latitude-a.lat)*r,dn=(b.longitude-a.lon)*r;
+ var x=Math.sin(dl/2)*Math.sin(dl/2)+Math.cos(a.lat*r)*Math.cos(b.latitude*r)*Math.sin(dn/2)*Math.sin(dn/2);
+ return 2*R*Math.asin(Math.sqrt(x))}
+
+function setGps(acc){
+ var d=$('dot'),t=$('gtxt');
+ if(acc==null){d.style.background='var(--dim)';t.textContent='GPS off';return}
+ if(acc<=10){d.style.background='var(--good)';t.textContent='GPS strong'}
+ else if(acc<=25){d.style.background='var(--ok)';t.textContent='GPS fair'}
+ else{d.style.background='var(--bad)';t.textContent='GPS weak'}
+}
+
+function render(){
+ var stale=trip&&last&&Date.now()-lastWall>6000;
+ $('speed').textContent=trip?(stale?'--':Math.round(speed)):'0';
+ $('top').textContent=Math.round(topAll);
+ $('top2').textContent=Math.round(topAll);
+ if(trip){
+  var el=(Date.now()-trip.start)/1000;
+  $('tmax').textContent=Math.round(trip.max);
+  $('dist').textContent=trip.dist.toFixed(2);
+  $('mov').textContent=clock(trip.mov);
+  $('ela').textContent=clock(el);
+  $('avg').textContent=trip.mov>3?(trip.dist/(trip.mov/3600)).toFixed(1):'0.0';
+ }
+}
+
+function onPos(p){
+ var c=p.coords,t=p.timestamp,acc=c.accuracy;
+ setGps(acc);
+ $('msg').textContent='';
+ if(acc>30)return;
+ var ms=c.speed;
+ if(ms==null||isNaN(ms)){
+  if(last){var dt0=(t-last.t)/1000;ms=dt0>0?hav(last,c)/dt0:0}else ms=0;
+ }
+ var kmh=ms*3.6; if(kmh<2)kmh=0;
+ var dt=0;
+ if(last){
+  dt=Math.min((t-last.t)/1000,5);
+  if(dt>0&&Math.abs(kmh-last.kmh)/dt>40&&rej<3){rej++;return}
+ }
+ rej=0;
+ last={t:t,kmh:kmh,lat:c.latitude,lon:c.longitude};
+ lastWall=Date.now();
+ speed=kmh;
+ if(trip){
+  if(kmh>0&&dt>0){trip.dist+=kmh/3.6*dt/1000;trip.mov+=dt}
+  if(acc<=15&&kmh<=300&&kmh>trip.max)trip.max=kmh;
+ }
+ if(acc<=15&&kmh<=300&&kmh>topAll){topAll=kmh;save('sp_top',topAll)}
+ render();
+}
+
+function onErr(e){
+ setGps(null);
+ $('msg').textContent=e.code===1?'Location is blocked. Allow location for this page, then tap Start ride again.':'Cannot get a GPS fix. Move to open sky.';
+}
+
+function getWake(){
+ try{if(navigator.wakeLock){navigator.wakeLock.request('screen').then(function(w){wake=w}).catch(function(){})}}catch(e){}
+}
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible'&&trip)getWake()});
+
+function start(){
+ if(!navigator.geolocation){$('msg').textContent='This browser has no GPS support.';return}
+ trip={start:Date.now(),dist:0,mov:0,max:0};
+ last=null;rej=0;speed=0;
+ watchId=navigator.geolocation.watchPosition(onPos,onErr,{enableHighAccuracy:true,maximumAge:0,timeout:15000});
+ getWake();
+ $('go').textContent='Stop ride';$('go').classList.add('stop');
+ render();
+}
+function stop(){
+ if(watchId!=null){navigator.geolocation.clearWatch(watchId);watchId=null}
+ try{if(wake){wake.release();wake=null}}catch(e){}
+ if(trip&&trip.dist>=0.1){
+  trips.unshift({start:trip.start,dur:(Date.now()-trip.start)/1000,mov:trip.mov,dist:trip.dist,max:trip.max});
+  trips=trips.slice(0,100);save('sp_trips',trips);
+ }
+ trip=null;last=null;speed=0;setGps(null);
+ $('go').textContent='Start ride';$('go').classList.remove('stop');
+ ['tmax','dist','avg'].forEach(function(i){$(i).textContent=i==='dist'?'0.00':i==='avg'?'0.0':'0'});
+ $('mov').textContent='0:00';$('ela').textContent='0:00';
+ render();drawTrips();
+}
+$('go').onclick=function(){trip?stop():start()};
+
+function drawTrips(){
+ var odo=trips.reduce(function(a,t){return a+t.dist},0);
+ $('odo').textContent=odo.toFixed(1);
+ var L=$('list');
+ if(!trips.length){L.innerHTML='<div class="empty">No trips yet.<br>Finish a ride of at least 100 m and it shows up here.</div>';return}
+ L.innerHTML=trips.map(function(t){
+  var d=new Date(t.start),avg=t.mov>3?(t.dist/(t.mov/3600)):0;
+  return '<div class="trip"><h3>'+d.toLocaleDateString(undefined,{weekday:'short',day:'numeric',month:'short'})+', '+d.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'})+'</h3>'+
+   '<div class="d">'+t.dist.toFixed(1)+' km</div>'+
+   '<p>Top '+Math.round(t.max)+' km/h. Avg '+avg.toFixed(0)+' km/h moving. Ride time '+clock(t.dur)+', moving '+clock(t.mov)+'.</p></div>';
+ }).join('');
+}
+
+var armed=false;
+$('reset').onclick=function(){
+ var b=$('reset');
+ if(!armed){armed=true;b.textContent='Tap again to confirm reset';setTimeout(function(){armed=false;b.textContent='Reset all-time top speed'},3000);return}
+ armed=false;topAll=0;save('sp_top',0);b.textContent='Reset all-time top speed';render();
+};
+
+document.querySelectorAll('.tabs button').forEach(function(b){
+ b.onclick=function(){
+  document.querySelectorAll('.tabs button').forEach(function(x){x.setAttribute('aria-selected',x===b)});
+  document.querySelectorAll('.view').forEach(function(v){v.classList.toggle('on',v.id===b.dataset.v)});
+  if(b.dataset.v==='trips')drawTrips();
+ };
+});
+
+setInterval(render,1000);
+render();drawTrips();
+})();
+</script>
+</body>
+</html>
